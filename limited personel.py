@@ -1260,8 +1260,6 @@ def render_additional_features():
         </button>
     </a>
     """, unsafe_allow_html=True)
-    
-    st.markdown(f"🔗 [點此開啟空白加班單]({overtime_form_url})", help="在新分頁開啟Google文件加班單")
 
 def render_system_info():
     """渲染系統資訊"""
