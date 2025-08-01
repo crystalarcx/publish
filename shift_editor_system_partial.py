@@ -1411,4 +1411,618 @@ class ExcelExporter:
         
         ws.cell(row=last_row + 3, column=1, value="總加班時數:")
         ws.cell(row=last_row + 3, column=2, value=f"{total_hours:.1f} 小時")
-        ws.cell(row=last_row + 3, column=2).font =
+        ws.cell(row=last_row + 3, column=2).font = Font(bold=True)
+        
+        wb.save(output)
+        output.seek(0)
+        
+        return output
+
+# ===== 主要界面函數 =====
+def main():
+    """主程式入口"""
+    # 初始化 Session State
+    SessionStateManager.initialize()
+    
+    st.title("🏢 員工班表加班時數統計系統")
+    st.caption("v2.1 優化版 - 指定人員專用")
+    
+    # 側邊欄
+    render_sidebar()
+    
+    # 顯示系統狀態
+    render_system_status()
+    
+    # 根據當前頁面顯示對應內容
+    page_router()
+
+def render_sidebar():
+    """渲染側邊欄"""
+    with st.sidebar:
+        st.header("📋 系統功能")
+        
+        # 功能按鈕
+        if st.button("📥 載入班表資料", type="primary" if st.session_state.current_page == "載入班表資料" else "secondary"):
+            st.session_state.current_page = "載入班表資料"
+            st.rerun()
+        
+        if st.button("🔍 查詢加班時數", type="primary" if st.session_state.current_page == "查詢加班時數" else "secondary"):
+            st.session_state.current_page = "查詢加班時數"
+            st.rerun()
+        
+        if st.button("🗓️ 自定義假日管理", type="primary" if st.session_state.current_page == "自定義假日管理" else "secondary"):
+            st.session_state.current_page = "自定義假日管理"
+            st.rerun()
+        
+        # 其他功能
+        render_additional_features()
+        
+        # 系統資訊
+        render_system_info()
+
+def render_additional_features():
+    """渲染額外功能"""
+    st.markdown("---")
+    st.markdown("### 📝 其他功能")
+    
+    # 空白加班單連結
+    overtime_form_url = Config.OVERTIME_FORM_URL
+    
+    st.markdown(f"""
+    <a href="{overtime_form_url}" target="_blank">
+        <button style="
+            background-color: #f0f2f6;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            width: 100%;
+            text-align: center;
+            color: #262730;
+        ">
+            📄 開啟空白加班單
+        </button>
+    </a>
+    """, unsafe_allow_html=True)
+
+def render_system_info():
+    """渲染系統資訊"""
+    st.markdown("---")
+    st.markdown("### ℹ️ 系統資訊")
+    
+    if st.session_state.data_load_time:
+        st.caption(f"⏰ 資料載入時間: {st.session_state.data_load_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    st.caption(f"🔄 快取版本: {st.session_state.cache_version}")
+    
+    # 清除快取按鈕
+    if st.button("🗑️ 清除快取", type="secondary", help="清除所有快取資料，強制重新載入"):
+        SessionStateManager.clear_cache()
+        st.success("✅ 快取已清除")
+        st.rerun()
+
+def render_system_status():
+    """渲染系統狀態"""
+    if st.session_state.df is not None:
+        personnel_count = DataValidator.count_allowed_personnel(st.session_state.df)
+        
+        # 只顯示自定義假日資訊
+        if st.session_state.custom_holidays:
+            # 取得目前月份的自定義假日
+            current_year = datetime.now().year
+            current_month = datetime.now().month
+            current_month_holidays = {k: v for k, v in st.session_state.custom_holidays.items()
+                                    if k.startswith(f"{current_year}-{current_month:02d}-")}
+            
+            if current_month_holidays:
+                st.success(f"🏖️ 自定義假日: 本月 {len(current_month_holidays)} 天 | 總計 {len(st.session_state.custom_holidays)} 天")
+                
+                # 顯示本月自定義假日詳情
+                holiday_details = []
+                for date_key, desc in sorted(current_month_holidays.items()):
+                    day = date_key.split('-')[2]
+                    holiday_details.append(f"{day}日({desc})")
+                
+                if holiday_details:
+                    st.info(f"📅 本月假日: {', '.join(holiday_details)}")
+            else:
+                st.success(f"🏖️ 自定義假日: 總計 {len(st.session_state.custom_holidays)} 天")
+        else:
+            st.info("📅 目前無自定義假日")
+    else:
+        st.warning("📋 尚未載入任何班表資料")
+
+def page_router():
+    """頁面路由"""
+    if st.session_state.current_page == "載入班表資料":
+        load_data_page()
+    elif st.session_state.current_page == "查詢加班時數":
+        query_page()
+    elif st.session_state.current_page == "自定義假日管理":
+        holiday_management_page()
+
+def load_data_page():
+    """載入資料頁面"""
+    st.header("📥 載入雲端班表資料")
+    
+    with st.form("load_data_form"):
+        main_sheet_url = st.text_area(
+            "員工班表 Google Sheets 連結",
+            placeholder="請貼上員工班表的 Google Sheets 完整連結",
+            help="請確保 Google Sheets 已設定為「知道連結的使用者」可檢視"
+        )
+        
+        st.info("📋 班種對照表: 系統將自動使用預設的班種對照表")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            submit_button = st.form_submit_button("📥 載入雲端班表", type="primary")
+        with col2:
+            load_default = st.form_submit_button("🔄 載入預設班表")
+    
+    # 處理載入預設班表
+    if load_default:
+        main_sheet_url = Config.DEFAULT_MAIN_SHEET_URL
+        st.info("✅ 使用預設班表連結")
+        submit_button = True
+    
+    if submit_button:
+        if not main_sheet_url.strip():
+            st.error("❌ 請輸入員工班表的 Google Sheets 連結")
+            return
+        
+        with st.spinner("🔄 正在載入班表資料..."):
+            df, shift_dict, message = DataLoader.load_data_from_urls(
+                main_sheet_url, st.session_state.cache_version
+            )
+        
+        if df is not None:
+            # 更新 session state
+            st.session_state.df = df
+            st.session_state.shift_dict = shift_dict
+            SessionStateManager.clear_cache()
+            
+            st.success(message)
+            
+            # 顯示資料預覽
+            with st.expander("📊 資料預覽", expanded=False):
+                st.write("**班表前5行資料:**")
+                st.dataframe(df.head())
+                
+                st.write("**班種對照表:**")
+                shift_preview = []
+                for shift_type, shift_info in list(shift_dict.items())[:10]:
+                    shift_preview.append({
+                        '班種': shift_type,
+                        '加班時數1': shift_info.overtime_hours_1,
+                        '加班時數2': shift_info.overtime_hours_2,
+                        '跨日時數': shift_info.cross_day_hours
+                    })
+                st.dataframe(pd.DataFrame(shift_preview))
+        else:
+            st.error(message)
+
+def query_page():
+    """查詢頁面"""
+    st.header("🔍 員工加班時數查詢")
+    
+    if st.session_state.df is None:
+        st.warning("⚠️ 請先載入班表資料")
+        return
+    
+    df = st.session_state.df
+    personnel_options = DataProcessor.get_personnel_options(df)
+    
+    if not personnel_options:
+        st.error("❌ 未找到指定的人事號")
+        st.info(f"📋 系統僅支援以下人事號: {', '.join(Config.ALLOWED_PERSONNEL)}")
+        return
+    
+    # 查詢表單
+    with st.form("query_form"):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            selected_personnel = st.selectbox("選擇人事號", personnel_options)
+        
+        with col2:
+            year = st.number_input("西元年", min_value=Config.MIN_YEAR, max_value=Config.MAX_YEAR, 
+                                 value=datetime.now().year)
+        
+        with col3:
+            month = st.selectbox("月份", 
+                               [(i, f"{i}月") for i in range(1, 13)], 
+                               index=datetime.now().month-1,
+                               format_func=lambda x: x[1])
+        
+        col_query, col_preview = st.columns(2)
+        with col_query:
+            submit_query = st.form_submit_button("🔍 查詢加班時數", type="primary")
+        with col_preview:
+            preview_schedule = st.form_submit_button("👁️ 預覽班表", type="secondary")
+    
+    # 處理班表預覽
+    if preview_schedule:
+        handle_schedule_preview(selected_personnel, year, month[0], df)
+    
+    # 顯示班表預覽
+    if st.session_state.preview_data is not None:
+        render_schedule_preview()
+    
+    # 處理查詢
+    if submit_query:
+        handle_overtime_query(selected_personnel, year, month[0], df)
+    
+    # Excel 匯出功能
+    if st.session_state.last_query_result is not None:
+        render_excel_export()
+
+def handle_schedule_preview(selected_personnel: str, year: int, month: int, df: pd.DataFrame):
+    """處理班表預覽"""
+    target_personnel = selected_personnel.split(' (')[0]
+    
+    # 驗證參數
+    is_valid, error_msg = DataValidator.validate_query_parameters(target_personnel, year, month)
+    if not is_valid:
+        st.error(f"❌ {error_msg}")
+        return
+    
+    matching_columns = DataProcessor.find_matching_personnel_columns(df, target_personnel)
+    
+    if matching_columns:
+        with st.spinner(f"👁️ 正在生成 {target_personnel} 的 {year}年{month}月 班表預覽..."):
+            preview_data = SchedulePreview.generate_schedule_preview(target_personnel, year, month, matching_columns)
+            st.session_state.preview_data = preview_data
+    else:
+        st.error(f"❌ 未找到人事號: {target_personnel}")
+
+def render_schedule_preview():
+    """渲染班表預覽"""
+    preview_info = st.session_state.preview_data
+    st.subheader(f"👁️ {preview_info.personnel} - {preview_info.year}年{preview_info.month}月班表預覽")
+    
+    # 顯示統計資訊
+    total_days = len(preview_info.data)
+    work_days = sum(1 for item in preview_info.data if item['班次'] != '休假')
+    holiday_work_days = sum(1 for item in preview_info.data if item['班次'] != '休假' and item['類型'] == '假日')
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("總天數", f"{total_days} 天")
+    with col2:
+        st.metric("上班天數", f"{work_days} 天")
+    with col3:
+        st.metric("假日上班", f"{holiday_work_days} 天")
+    with col4:
+        st.metric("休假天數", f"{total_days - work_days} 天")
+    
+    # 顯示詳細班表
+    df_preview = pd.DataFrame(preview_info.data)
+    st.dataframe(df_preview, use_container_width=True)
+
+def handle_overtime_query(selected_personnel: str, year: int, month: int, df: pd.DataFrame):
+    """處理加班時數查詢"""
+    target_personnel = selected_personnel.split(' (')[0]
+    
+    # 驗證參數
+    is_valid, error_msg = DataValidator.validate_query_parameters(target_personnel, year, month)
+    if not is_valid:
+        st.error(f"❌ {error_msg}")
+        return
+    
+    with st.spinner(f"🔍 正在查詢 {target_personnel} 的 {year}年{month}月 加班時數..."):
+        # 查找匹配的欄位
+        matching_columns = DataProcessor.find_matching_personnel_columns(df, target_personnel)
+        
+        if not matching_columns:
+            st.error(f"❌ 未找到人事號: {target_personnel}")
+            return
+        
+        # 計算加班時數
+        query_result = OvertimeCalculator.calculate_overtime_summary(
+            target_personnel, year, month, matching_columns
+        )
+        
+        # 儲存查詢結果
+        st.session_state.last_query_result = query_result
+    
+    # 顯示查詢結果
+    render_query_results(query_result)
+
+def render_query_results(query_result: QueryResult):
+    """渲染查詢結果"""
+    st.success("✅ 查詢完成！")
+    
+    # 顯示自定義假日資訊
+    render_custom_holidays_info(query_result.year, query_result.month)
+    
+    # 統計結果卡片
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("平日加班時數", f"{query_result.weekday_hours:.1f} 小時", 
+                 delta=f"{query_result.weekday_hours - Config.MAX_WEEKDAY_HOURS:.1f}" if query_result.weekday_hours != Config.MAX_WEEKDAY_HOURS else None)
+    with col2:
+        st.metric("假日加班時數", f"{query_result.weekend_hours:.1f} 小時")
+    with col3:
+        st.metric("總加班時數", f"{query_result.total_hours:.1f} 小時")
+    
+    # 詳細每日資料
+    if query_result.daily_breakdown:
+        render_daily_breakdown(query_result.daily_breakdown, query_result.year, query_result.month)
+
+def render_custom_holidays_info(year: int, month: int):
+    """渲染自定義假日資訊"""
+    if st.session_state.custom_holidays:
+        current_month_holidays = {k: v for k, v in st.session_state.custom_holidays.items()
+                                if k.startswith(f"{year}-{month:02d}-")}
+        if current_month_holidays:
+            st.info(f"🏖️ 本月自定義假日 ({len(current_month_holidays)} 天)")
+            holiday_list = []
+            for date_key, desc in sorted(current_month_holidays.items()):
+                holiday_list.append(f"• {date_key}: {desc}")
+            st.markdown("\n".join(holiday_list))
+
+def render_daily_breakdown(daily_breakdown: Dict[str, float], year: int, month: int):
+    """渲染每日明細"""
+    st.subheader("📅 詳細每日加班記錄")
+    
+    # 創建表格數據
+    table_data = []
+    for date_str, hours in sorted(daily_breakdown.items()):
+        if hours > 0:
+            try:
+                date_parts = date_str.split('/')
+                check_year = int(date_parts[0])
+                check_month = int(date_parts[1])
+                check_day = int(date_parts[2])
+                day_type, is_weekend = DateHelper.get_day_type(check_year, check_month, check_day)
+                
+                table_data.append({
+                    '日期': date_str,
+                    '星期': day_type,
+                    '加班時數': f"{hours:.1f}小時",
+                    '類型': '假日' if is_weekend else '平日'
+                })
+            except (ValueError, IndexError):
+                continue
+    
+    if table_data:
+        df_display = pd.DataFrame(table_data)
+        
+        # 按類型分組顯示
+        weekday_data = [row for row in table_data if row['類型'] == '平日']
+        weekend_data = [row for row in table_data if row['類型'] == '假日']
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if weekday_data:
+                st.write("**平日加班記錄:**")
+                st.dataframe(pd.DataFrame(weekday_data), use_container_width=True)
+        
+        with col2:
+            if weekend_data:
+                st.write("**假日加班記錄:**")
+                st.dataframe(pd.DataFrame(weekend_data), use_container_width=True)
+
+def render_excel_export():
+    """渲染Excel匯出功能"""
+    st.subheader("📊 匯出報表")
+    
+    result = st.session_state.last_query_result
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        st.info(f"📋 準備匯出: {result.target_personnel} - {result.year}年{result.month:02d}月加班統計")
+    
+    with col2:
+        export_button = st.button("📊 產生Excel報表", type="secondary", key="export_excel_btn")
+    
+    if export_button:
+        with st.spinner("📊 正在產生Excel報表..."):
+            success, file_content_or_error, weekday_total, weekend_total, total_hours_export, row_count = ExcelExporter.export_to_excel(result)
+            
+            if success:
+                filename = f"{result.target_personnel}_{result.year}年{result.month:02d}月_加班時數統計.xlsx"
+                
+                st.success("✅ Excel報表產生成功！")
+                
+                # 顯示統計資訊
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("平日時數", f"{weekday_total:.1f}h")
+                with col2:
+                    st.metric("假日時數", f"{weekend_total:.1f}h")
+                with col3:
+                    st.metric("資料筆數", f"{row_count}筆")
+                
+                # 提供下載按鈕
+                st.download_button(
+                    label="📥 下載Excel檔案",
+                    data=file_content_or_error.getvalue(),
+                    file_name=filename,
+                    mime="application/vnd.openxmlformats-officeedocument.spreadsheetml.sheet",
+                    key="download_excel_btn"
+                )
+            else:
+                st.error(f"❌ {file_content_or_error}")
+
+def holiday_management_page():
+    """自定義假日管理頁面"""
+    st.header("🗓️ 自定義假日管理")
+    
+    # 提醒使用者沒有記憶功能
+    st.warning("⚠️ 注意：自定義假日設定在關閉瀏覽器或重新載入頁面後將會清除，沒有記憶功能。")
+    
+    # 新增假日區域
+    render_add_holiday_form()
+    
+    # 管理現有假日
+    render_existing_holidays()
+
+def render_add_holiday_form():
+    """渲染新增假日表單"""
+    st.subheader("➕ 新增自定義假日")
+    
+    with st.form("add_holiday_form"):
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            holiday_year = st.number_input("年份", min_value=Config.MIN_YEAR, max_value=Config.MAX_YEAR, 
+                                         value=datetime.now().year)
+        
+        with col2:
+            holiday_month = st.selectbox("月份", 
+                                       [(i, f"{i}月") for i in range(1, 13)], 
+                                       index=datetime.now().month-1,
+                                       format_func=lambda x: x[1])
+        
+        with col3:
+            holiday_day = st.number_input("日期", min_value=1, max_value=31, value=1)
+        
+        with col4:
+            holiday_reason = st.text_input("假日原因", value="自定義假日")
+        
+        col_add, col_remove = st.columns(2)
+        with col_add:
+            add_holiday = st.form_submit_button("➕ 新增假日", type="primary")
+        with col_remove:
+            remove_holiday = st.form_submit_button("❌ 移除假日", type="secondary")
+    
+    # 處理新增假日
+    if add_holiday:
+        year_val = holiday_year
+        month_val = holiday_month[0]
+        day_val = holiday_day
+        reason = holiday_reason.strip() if holiday_reason.strip() else "自定義假日"
+        
+        add_holiday_to_session(year_val, month_val, day_val, reason)
+    
+    # 處理移除假日
+    if remove_holiday:
+        year_val = holiday_year
+        month_val = holiday_month[0]
+        day_val = holiday_day
+        date_key = f"{year_val}-{month_val:02d}-{day_val:02d}"
+        
+        if date_key in st.session_state.custom_holidays:
+            removed = st.session_state.custom_holidays.pop(date_key)
+            st.success(f"✅ 已移除自定義假日: {date_key} ({removed})")
+            st.rerun()
+        else:
+            st.warning(f"⚠️ 該日期不是自定義假日: {date_key}")
+
+def add_holiday_to_session(year: int, month: int, day: int, reason: str):
+    """添加假日到session"""
+    try:
+        test_date = date(year, month, day)
+        date_key = f"{year}-{month:02d}-{day:02d}"
+        
+        weekdays = ['一', '二', '三', '四', '五', '六', '日']
+        weekday = weekdays[test_date.weekday()]
+        
+        st.session_state.custom_holidays[date_key] = f"{reason}({weekday})"
+        st.success(f"✅ 已新增假日: {date_key} {reason}({weekday})")
+        st.rerun()
+    except ValueError:
+        st.error(f"❌ 無效日期: {year}-{month:02d}-{day:02d}")
+
+def render_existing_holidays():
+    """渲染現有假日管理"""
+    st.subheader("📅 目前設定的自定義假日")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🗑️ 清除所有假日", type="secondary"):
+            if st.session_state.custom_holidays:
+                st.session_state.custom_holidays.clear()
+                st.success("✅ 已清除所有自定義假日")
+                st.rerun()
+            else:
+                st.info("📅 目前沒有設定任何自定義假日")
+    
+    with col2:
+        # 匯出假日設定
+        if st.session_state.custom_holidays and st.button("📄 匯出假日清單", type="secondary"):
+            holiday_text = "\n".join([f"{date_key}: {desc}" for date_key, desc in sorted(st.session_state.custom_holidays.items())])
+            st.download_button(
+                label="📥 下載假日清單",
+                data=holiday_text,
+                file_name=f"自定義假日_{datetime.now().strftime('%Y%m%d')}.txt",
+                mime="text/plain"
+            )
+    
+    # 顯示假日清單
+    if st.session_state.custom_holidays:
+        st.write(f"**目前共有 {len(st.session_state.custom_holidays)} 個自定義假日:**")
+        
+        # 轉換為表格顯示
+        holiday_data = []
+        for date_key, description in sorted(st.session_state.custom_holidays.items()):
+            holiday_data.append({
+                '日期': date_key,
+                '描述': description,
+                '年': date_key.split('-')[0],
+                '月': date_key.split('-')[1],
+                '日': date_key.split('-')[2]
+            })
+        
+        df_holidays = pd.DataFrame(holiday_data)
+        
+        # 分頁顯示
+        if len(df_holidays) > 10:
+            # 使用分頁
+            page_size = 10
+            total_pages = (len(df_holidays) - 1) // page_size + 1
+            
+            page_num = st.selectbox("選擇頁面", range(1, total_pages + 1), format_func=lambda x: f"第 {x} 頁")
+            
+            start_idx = (page_num - 1) * page_size
+            end_idx = start_idx + page_size
+            
+            st.dataframe(df_holidays[['日期', '描述']].iloc[start_idx:end_idx], use_container_width=True)
+            
+            st.caption(f"顯示第 {start_idx + 1}-{min(end_idx, len(df_holidays))} 筆，共 {len(df_holidays)} 筆")
+        else:
+            st.dataframe(df_holidays[['日期', '描述']], use_container_width=True)
+        
+        # 按月份分組顯示
+        render_holidays_by_month(df_holidays)
+    else:
+        st.info("📅 目前沒有設定任何自定義假日")
+
+def render_holidays_by_month(df_holidays: pd.DataFrame):
+    """按月份分組顯示假日"""
+    st.subheader("📊 按月份分組")
+    
+    months_dict = {}
+    for _, row in df_holidays.iterrows():
+        year_month = row['日期'][:7]  # YYYY-MM
+        if year_month not in months_dict:
+            months_dict[year_month] = []
+        months_dict[year_month].append(f"{row['日期']}: {row['描述']}")
+    
+    # 使用tabs顯示不同月份
+    if months_dict:
+        month_tabs = st.tabs([f"📅 {ym} ({len(holidays)}天)" for ym, holidays in sorted(months_dict.items())])
+        
+        for i, (year_month, holidays) in enumerate(sorted(months_dict.items())):
+            with month_tabs[i]:
+                for holiday in holidays:
+                    st.write(f"• {holiday}")
+
+# ===== 程式入口點 =====
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        st.error(f"❌ 系統發生錯誤: {str(e)}")
+        st.info("🔄 請嘗試重新載入頁面或清除快取")
+        
+        # 錯誤詳情（開發模式）
+        with st.expander("🔍 錯誤詳情 (開發模式)", expanded=False):
+            st.exception(e)
+                    
