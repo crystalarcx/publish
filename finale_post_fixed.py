@@ -37,7 +37,7 @@ class Config:
     """系統設定常數"""
     # 班表相關設定 新班表替換掉main
     DEFAULT_SHIFT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1JfhGZYRBWj6yp90o-sA0DrhzkcEM1Wfd_vqiEZEYd5c/edit?usp=sharing"
-    DEFAULT_MAIN_SHEET_URL = "https://docs.google.com/spreadsheets/d/1N04MMjYzs_iPzPVzJTlv83rkgSpONbtk0xdHNXJtKkA/edit?usp=sharing"
+    DEFAULT_MAIN_SHEET_URL = "https://docs.google.com/spreadsheets/d/1qWPf_cuq0Gu8UZaG9pulU8H3TQPDv3lpKfjxipOO3tk/edit?usp=sharing"
     OVERTIME_FORM_URL = "https://docs.google.com/document/d/1T75rw_3hQtIaBTGMFxa09G93Atihf4h-883Kg1tqPpo/edit?usp=sharing"
     
     # 指定的人事號清單
