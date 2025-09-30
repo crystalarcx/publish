@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>在宅急症照護費用預估系統</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft JhengHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
+        select, input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: all 0.3s;
+        }
+        
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        
+        .type-button {
+            padding: 20px 15px;
+            background: white;
+            color: #333;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .type-button:hover {
+            border-color: #667eea;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.2);
+        }
+        
+        .type-button.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .calculate-button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .calculate-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .calculate-button:active {
+            transform: translateY(0);
+        }
+        
+        #map {
+            width: 100%;
+            height: 350px;
+            border-radius: 12px;
+            margin: 20px 0;
+            display: none;
+            border: 2px solid #e0e0e0;
+        }
+        
+        .result {
+            display: none;
+            margin-top: 30px;
+            padding: 25px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 12px;
+        }
+        
+        .result h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 22px;
+            text-align: center;
+        }
+        
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #d0d0d0;
+            font-size: 15px;
+        }
+        
+        .cost-item:last-child {
+            border-bottom: none;
+        }
+        
+        .cost-label {
+            color: #555;
+            font-weight: 500;
+        }
+        
+        .cost-value {
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .total {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 3px solid #667eea;
+        }
+        
+        .total .cost-item {
+            border: none;
+            font-size: 20px;
+        }
+        
+        .total .cost-label {
+            color: #667eea;
+            font-weight: 700;
+        }
+        
+        .total .cost-value {
+            color: #667eea;
+            font-weight: 700;
+            font-size: 24px;
+        }
+        
+        .info-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #856404;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+            font-weight: 600;
+        }
+        
+        .error {
+            display: none;
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 4px;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 在宅急症照護費用預估系統</h1>
+        <p class="subtitle">台南市永康區中華路901號</p>
+        
+        <div class="form-group">
+            <label>感染類別</label>
+            <div class="button-group">
+                <button type="button" class="type-button" data-type="pneumonia">
+                    🫁 肺炎
+                </button>
+                <button type="button" class="type-button" data-type="uti">
+                    💧 尿路感染
+                </button>
+                <button type="button" class="type-button" data-type="soft_tissue">
+                    🩹 軟組織感染
+                </button>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="address">患者地址</label>
+            <input type="text" id="address" placeholder="請輸入完整地址（例：台南市東區大學路1號）">
+        </div>
+        
+        <button class="calculate-button" onclick="calculateCost()">計算費用</button>
+        
+        <div class="loading" id="loading">計算中，請稍候...</div>
+        <div class="error" id="error"></div>
+        
+        <div id="map"></div>
+        
+        <div class="result" id="result">
+            <h2>📋 費用預估結果</h2>
+            <div class="cost-item">
+                <span class="cost-label">感染類別</span>
+                <span class="cost-value" id="infectionLabel"></span>
+            </div>
+            <div class="cost-item">
+                <span class="cost-label">醫護訪視費用</span>
+                <span class="cost-value" id="visitCost"></span>
+            </div>
+            <div class="cost-item">
+                <span class="cost-label">行車距離</span>
+                <span class="cost-value" id="distance"></span>
+            </div>
+            <div class="cost-item">
+                <span class="cost-label">單日交通費用</span>
+                <span class="cost-value" id="transportCost"></span>
+            </div>
+            <div class="cost-item">
+                <span class="cost-label">標準治療天數</span>
+                <span class="cost-value" id="days"></span>
+            </div>
+            <div class="cost-item">
+                <span class="cost-label">交通費用小計</span>
+                <span class="cost-value" id="totalTransport"></span>
+            </div>
+            <div class="total">
+                <div class="cost-item">
+                    <span class="cost-label">預估總費用</span>
+                    <span class="cost-value" id="totalCost"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = 'AIzaSyD3OziKOdWQcZ_ozelsG0U6nWnJoY3jN4I';
+        let map;
+        let directionsService;
+        let directionsRenderer;
+        let selectedInfection = '';
+        
+        const CLINIC_ADDRESS = '台南市永康區中華路901號';
+        
+        const infectionData = {
+            pneumonia: { name: '肺炎', cost: '2,500-3,000', minCost: 2500, maxCost: 3000, days: 10 },
+            uti: { name: '尿路感染', cost: '1,500-2,000', minCost: 1500, maxCost: 2000, days: 7 },
+            soft_tissue: { name: '軟組織感染', cost: '1,500-2,000', minCost: 1500, maxCost: 2000, days: 7 }
+        };
+        
+        // 按鈕選擇功能
+        document.addEventListener('DOMContentLoaded', function() {
+            const typeButtons = document.querySelectorAll('.type-button');
+            
+            typeButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    typeButtons.forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+                    selectedInfection = this.getAttribute('data-type');
+                });
+            });
+            
+            // 自動載入 Google Maps API
+            loadGoogleMapsAPI(API_KEY).then(() => {
+                initMap();
+            }).catch(error => {
+                console.error('載入 Google Maps 失敗:', error);
+            });
+        });
+        
+        function getTransportCost(km) {
+            if (km <= 2) return 200;
+            if (km <= 5) return 280;
+            if (km <= 10) return 480;
+            return 480;
+        }
+        
+        function loadGoogleMapsAPI(apiKey) {
+            return new Promise((resolve, reject) => {
+                if (window.google && window.google.maps) {
+                    resolve();
+                    return;
+                }
+                
+                const script = document.createElement('script');
+                script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&language=zh-TW`;
+                script.async = true;
+                script.defer = true;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+        
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 13,
+                center: { lat: 23.0, lng: 120.2 }
+            });
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer();
+            directionsRenderer.setMap(map);
+        }
+        
+        async function calculateCost() {
+            const address = document.getElementById('address').value.trim();
+            
+            const errorDiv = document.getElementById('error');
+            const loadingDiv = document.getElementById('loading');
+            const resultDiv = document.getElementById('result');
+            const mapDiv = document.getElementById('map');
+            
+            errorDiv.style.display = 'none';
+            resultDiv.style.display = 'none';
+            mapDiv.style.display = 'none';
+            
+            if (!selectedInfection) {
+                errorDiv.textContent = '請選擇感染類別';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            if (!address) {
+                errorDiv.textContent = '請輸入患者地址';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            loadingDiv.style.display = 'block';
+            
+            try {
+                const request = {
+                    origin: CLINIC_ADDRESS,
+                    destination: address,
+                    travelMode: 'DRIVING'
+                };
+                
+                directionsService.route(request, (result, status) => {
+                    loadingDiv.style.display = 'none';
+                    
+                    if (status === 'OK') {
+                        const route = result.routes[0].legs[0];
+                        const distanceKm = route.distance.value / 1000;
+                        
+                        directionsRenderer.setDirections(result);
+                        mapDiv.style.display = 'block';
+                        
+                        const infection = infectionData[selectedInfection];
+                        const transportCost = getTransportCost(distanceKm);
+                        const totalTransport = transportCost * infection.days;
+                        const avgVisitCost = (infection.minCost + infection.maxCost) / 2;
+                        const totalCost = avgVisitCost + totalTransport;
+                        
+                        document.getElementById('infectionLabel').textContent = infection.name;
+                        document.getElementById('visitCost').textContent = `NT$ ${infection.cost}`;
+                        document.getElementById('distance').textContent = `${distanceKm.toFixed(2)} 公里`;
+                        document.getElementById('transportCost').textContent = `NT$ ${transportCost}`;
+                        document.getElementById('days').textContent = `${infection.days} 天`;
+                        document.getElementById('totalTransport').textContent = `NT$ ${totalTransport.toLocaleString()}`;
+                        document.getElementById('totalCost').textContent = `NT$ ${Math.round(totalCost).toLocaleString()}`;
+                        
+                        resultDiv.style.display = 'block';
+                        
+                        resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    } else {
+                        errorDiv.textContent = '無法計算路線，請檢查地址是否正確';
+                        errorDiv.style.display = 'block';
+                    }
+                });
+                
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                errorDiv.textContent = '計算過程發生錯誤，請稍後再試';
+                errorDiv.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>
